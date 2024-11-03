@@ -8,6 +8,9 @@ set(SRC
     common/status.cpp
     raft/config.h
     raft/proto.cpp
+    raft/storage.cpp
+    raft/util.cpp
+    common/log.h
 )
 
 find_package(PkgConfig REQUIRED)

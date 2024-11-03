@@ -12,3 +12,7 @@ find_package(GTest REQUIRED)
 add_executable(test_proto test_proto.cpp)
 target_link_libraries(test_proto ${LIBS})
 gtest_add_tests(TARGET test_proto)
+
+add_executable(test_storage test_storage.cpp)
+target_link_libraries(test_storage ${LIBS})
+gtest_add_tests(TARGET test_storage)
