@@ -16,3 +16,7 @@ gtest_add_tests(TARGET test_proto)
 add_executable(test_storage test_storage.cpp)
 target_link_libraries(test_storage ${LIBS})
 gtest_add_tests(TARGET test_storage)
+
+add_executable(test_unstable test_unstable.cpp)
+target_link_libraries(test_unstable ${LIBS})
+gtest_add_tests(TARGET test_unstable)

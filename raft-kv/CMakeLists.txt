@@ -11,6 +11,7 @@ set(SRC
     raft/storage.cpp
     raft/util.cpp
     common/log.h
+    raft/unstable.cpp
 )
 
 find_package(PkgConfig REQUIRED)

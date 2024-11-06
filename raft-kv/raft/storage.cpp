@@ -166,7 +166,7 @@ Status MemoryStorage::apply_snapshot(const proto::Snapshot &snapshot) {
         return Status::invalid_argument("requested index is older than the existing snapshot");
     }
     snapshot_ = std::make_shared<proto::Snapshot>(snapshot);
-    entries_.resize(1);
+    entries_.resize(1); //!这里应该就是日志缩减了
     proto::EntryPtr entry(new proto::Entry());
     entry->term = snapshot_->metadata.term;
     entry->index = snapshot_->metadata.index;
