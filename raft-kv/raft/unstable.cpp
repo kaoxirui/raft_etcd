@@ -45,7 +45,7 @@ void Unstable::maybe_term(uint64_t index, uint64_t &term, bool &ok) {
     }
     uint64_t last = 0;
     bool last_ok = false;
-    maybe_first_index(last, last_ok);
+    maybe_last_index(last, last_ok);
     if (!last_ok) {
         return;
     }

@@ -17,7 +17,7 @@ public:
     // maybe_append returns (0, false) if the entries cannot be appended. Otherwise,
     // it returns (last index of new entries, true).
     void maybe_append(uint64_t index, uint64_t log_term, uint64_t committed, std::vector<proto::EntryPtr> entries,
-                      uint64_t &last_new_index, bool *ok);
+                      uint64_t &last_new_index, bool &ok);
     //return last index
     uint64_t append(std::vector<proto::EntryPtr> entries);
 
@@ -42,6 +42,9 @@ public:
     // has_next_entries returns if there is any available entries for execution. This
     // is a fast check without heavy slice in next_entries.
     bool has_next_entries() const;
+
+    //slice returns a slice of log entries from low through high-1,inclusive
+    Status slice(uint64_t low, uint64_t high, uint64_t max_size, std::vector<proto::EntryPtr> &entries) const;
 
     // is_up_to_date determines if the given (lastIndex,term) log is more up-to-date
     // by comparing the index and term of the last entries in the existing logs.

@@ -23,7 +23,7 @@ https://blog.csdn.net/weixin_42663840/article/details/100005978
 
 ## log的实现
 
-其实etcd的raft包中的log模块只是实现了Entry的简单管理，用C++语言描述就是std::vector<Entry>的各种操作。新来的日志追加到尾部，从头部弹出日志给etcd应用，整个过程看似简单至极。这在单机系统（确切的说是单进程）确实很简单，但是对于分布式有状态系统来说就会变得相对复杂一点。举一个简单的例子：leader将日志发给其他节点，其他节点就要老老实实的追加日志么？万一日志失效了怎么半？此处读者如果不理解日志为什么会失效，可以搜索两阶段提交协议、三阶提交协议了解一下。raft使用了两阶段提交协议，即leader需要确认超过一半以上的节点收到了日志才能再向peer发提交命令。如果在发送提交命令前leader挂了，就要发起新一轮的选举，此时老leader没有确认提交的日志都变成了无效日志。
+其实etcd的raft包中的log模块只是实现了Entry的简单管理，用C++语言描述就是`std::vector<Entry>`的各种操作。新来的日志追加到尾部，从头部弹出日志给etcd应用，整个过程看似简单至极。这在单机系统（确切的说是单进程）确实很简单，但是对于分布式有状态系统来说就会变得相对复杂一点。举一个简单的例子：leader将日志发给其他节点，其他节点就要老老实实的追加日志么？万一日志失效了怎么半？此处读者如果不理解日志为什么会失效，可以搜索两阶段提交协议、三阶提交协议了解一下。raft使用了两阶段提交协议，即leader需要确认超过一半以上的节点收到了日志才能再向peer发提交命令。如果在发送提交命令前leader挂了，就要发起新一轮的选举，此时老leader没有确认提交的日志都变成了无效日志。
 
 虽说日志管理变得复杂了，但是核心原理还是`std::vector<Entry>`的各种操作，无非是形式稍微变化了一下。
 ```C++
@@ -166,7 +166,15 @@ snapshot包含了已经持久化的日志状态到某个索引index的数据，�
 
 如果entries为空，返回的仍然是`snapshot_->metadata.index + 1`。是不是如果entries数组发生变动，日志系统还是可以通过快照索引准确获取日志起始位置，从而避免依赖entries的状态
 
+![image-20241103001949263.png](README/6c89d5a8d99549dd88cad4ed7d1de383tplv-73owjymdk6-jj-mark-v100005o6Y6YeR5oqA5pyv56S-5Yy6IEAgSnVzdExvcmFpbg==q75.webp)
+
+假设RaftLog中已经持久化了5个日志条目，现在有3个日志条目存储在unstable中，并且这3个日志条目正在被持久化
+
+`offset=6` 代表位于 `unstable.entries` 切片 0,1,2 位置的日志条目对应的是实际 Raft Log 中 6（0+6），7（1+6），8（1+2）的位置，通过 `offsetInProgress=9` 我们就可以知道 `unstable.entries[:9-6]` 也就是 0,1,2 三个日志条目都正在被持久化。
+
 ## RaftLog
+
+`applied_<=committed_`，因为状态机只能应用已经提交的日志条目
 
 ![img](README/5ba3348f9a8043b7f3608cd41d843b70.png)
 
@@ -183,3 +191,117 @@ snapshot包含了已经持久化的日志状态到某个索引index的数据，�
 3. leader会搜集所有peer的接收日志状态，只要日志被超过半数以上的peer接收，那么就会提交该日志，peer接收到leader的数据包更新自己的已提交的最大索引值，这样小于等于该索引值的日志就是可以被提交的日志。
 4. 已经提交的日志会被使用者获得，并逐条应用，进而影响使用者的数据状态
 5. 已经被应用的日志意味着使用者已经把状态持久化在自己的存储中了，这条日志就可以删除了，避免日志一直追加造成存储无限增大的问题。不要忘了所有的日志都存储在MemoryStorage中，不删除已应用的日志对于内存是一种浪费，这也就是日志的compacted。
+
+
+
+# progress&quorum
+
+1. peer:raft中参与选举和投票的节点
+2. leader：集群的领导者
+3. follower：peer中除了follower以外的节点
+4. learner：不参与选举和投票的节点，一致从leader同步日志，只输入不输出，像个学生。空白节点加入集群都是learner
+5. quorum：法定人数，在raft中超过一半以上的人数就是法定人数
+
+## progress
+
+```C++
+// Progress represents a follower’s progress in the view of the leader. Leader maintains
+// progresses of all followers, and sends entries to the follower based on its progress.
+```
+
+**progress代表了leader视角的follower进度，leader拥有所有follower的进度，并根据其进度向follower发送日志**
+
+对于raft而言，系统的决策是leader，其他follower都是从leader同步的，即leader发送给follower的。作为leader，需要知道所有peer都同步到什么进度了，所以就有了progress
+
+progress的成员变量
+
+```C++
+
+    /*
+    leader与follower之间的状态同步是异步的，leader将日志发送给follower，follwoer再回复收到了哪些日志
+    出于效率考虑，leader不会每条日志以类似同步调用的方式发送给follower，而是只要leader有新日志就发送，	 
+    next就是记录下一次发送日志起始索引。换言之，发送给peer的最大日志索引是Next-1
+    match是经过follower确认接收的最大日志索引
+    next-match-1就是inflights的日志数量
+    */
+	//表示该节点上已成功复制的最新日志条目的索引
+    uint64_t match;
+    //表示写一条将发送到该节点的日志条目的索引
+    uint64_t next;
+    // state defines how the leader should interact with the follower.
+    //
+    // When in ProgressStateProbe, leader sends at most one replication message
+    // per heartbeat interval. It also probes actual progress of the follower.
+    //
+    // When in ProgressStateReplicate, leader optimistically increases next
+    // to the latest entry sent after sending replication message. This is
+    // an optimized state for fast replicating log entries to the follower.
+    //
+    // When in ProgressStateSnapshot, leader should have sent out snapshot
+    // before and stops sending any replication message.
+    //表示当前节点的状态
+	// Progress一共有三种状态，分别为探测（StateProbe）、复制（StateReplicate）、快照（StateSnapshot）
+    // 探测：一般是系统选举完成后，Leader不知道所有Follower都是什么进度，所以需要发消息探测一下，从
+    //    Follower的回复消息获取进度。在还没有收到回消息前都还是探测状态。因为不确定Follower是
+    //    否活跃，所以发送太多的探测消息意义不大，只发送一个探测消息即可。
+    // 复制：当Peer回复探测消息后，消息中有该节点接收的最大日志索引，如果回复的最大索引大于Match，
+    //    以此索引更新Match，Progress就进入了复制状态，开启高速复制模式。复制制状态不同于
+    //    探测状态，Leader会发送更多的日志消息来提升IO效率，就是上面提到的异步发送。这里就要引入
+    //    Inflight概念了，飞行中的日志，意思就是已经发送给Follower还没有被确认接收的日志数据，
+    //    后面会有inflight介绍。
+    // 快照：快照状态说明Follower正在复制Leader的快照
+    ProgressState state;
+
+    // paused is used in ProgressStateProbe.
+    // When Paused is true, raft should pause sending replication message to this peer.
+    //在探测状态下使用，表示是否暂停发送复制消息
+    bool paused;
+    // pending_snapshot is used in ProgressStateSnapshot.
+    // If there is a pending snapshot, the pendingSnapshot will be set to the
+    // index of the snapshot. If pendingSnapshot is set, the replication process of
+    // this Progress will be paused. raft will not resend snapshot until the pending one
+    // is reported to be failed.
+    //如果有待处理的快照，这个变量将被设置为快照的索引。 在快照被确认失败之前，不会重新发送快照
+    uint64_t pending_snapshot;
+
+    // recent_active is true if the progress is recently active. Receiving any messages
+    // from the corresponding follower indicates the progress is active.
+    // recent_active can be reset to false after an election timeout.
+    bool recent_active;
+
+    // inflights is a sliding window for the inflight messages.
+    // Each inflight message contains one or more log entries.
+    // The max number of entries per message is defined in raft config as MaxSizePerMsg.
+    // Thus inflight effectively limits both the number of inflight messages
+    // and the bandwidth each Progress can use.
+    // When inflights is full, no more message should be sent.
+    // When a leader sends out a message, the index of the last
+    // entry should be added to inflights. The index MUST be added
+    // into inflights in order.
+    // When a leader receives a reply, the previous inflights should
+    // be freed by calling inflights.freeTo with the index of the last
+    // received entry.
+    //滑动窗口，控制在飞日志条目的数量和带宽
+    /*
+    用于控制在飞的日志条目的数量和带宽。
+    他的主要作用是记录领导者发送给跟随着但尚未确认的日志条目索引，
+    并限制在飞日志条目的数量，以避免网络用晒或跟随着处理不过来的情况
+    */
+    std::shared_ptr<InFlights> inflights;
+
+    // is_learner is true if this progress is tracked for a learner.
+    bool is_learner;
+```
+
+探测状态通过paused控制探测消息的发送频率，复制状态通过inflights控制发送流量
+
+raft没有专门的探测消息，而是借助于其他消息实现，比如心跳消息，日志消息等
+
+## inflights
+
+ 在解释Inflights前先温习小学的数据题：有一个水池子，一个入水口，一个出水口，小学题一般会问什么时候
+ 能把池子放满。Inflights就好像这个池子，当Progress在复制状态时，Leader向Peer发日志消息相当于
+ 放水，Peer回复日志已经收到了相当于出水，当池子满了就不能放水了，也就是上面提到的暂停。作为一个
+ 容量相对固定的池子，有入水口有出水口，而且需要按照进水的顺序出水，这正符合queue的特性。而raft的
+ 实现没有使用queue，而是在一个内存块上采用循环方式模拟queue的特性，这样效率会更高。
+
