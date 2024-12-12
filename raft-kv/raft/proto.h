@@ -1,8 +1,8 @@
 #pragma once
+#include "../common/log.h"
+#include <msgpack.hpp>
 #include <stdint.h>
 #include <vector>
-#include <msgpack.hpp>
-#include "../common/log.h"
 
 namespace kv {
 namespace proto {
@@ -131,7 +131,7 @@ namespace proto {
         uint64_t index;
         std::vector<Entry> entries;
         uint64_t commit;
-        //Snapshot snapshot;
+        Snapshot snapshot;
         bool reject;
         uint64_t reject_hint;
         std::vector<uint8_t> context;

@@ -1,8 +1,9 @@
 #pragma once
+#include "status.h"
+#include "storage.h"
+#include <limits>
 #include <stdint.h>
 #include <vector>
-#include "status.h"
-#include <limits>
 
 namespace kv {
 enum ReadOnlyOption {
@@ -22,7 +23,7 @@ struct Config {
     //建议election_tick=10*heartbeat_tick
     uint32_t election_tick;
     uint32_t heartbeat_tick;
-    //StoragePtr storage
+    StoragePtr storage;
     //最后应用的索引
     uint64_t applied;
     //限制每个附加消息的最大字节大小
