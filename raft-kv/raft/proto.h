@@ -20,7 +20,7 @@ namespace proto {
     const MessageType MsgUnreachable = 10;
     const MessageType MsgSnapStatus = 11;
     const MessageType MsgCheckQuorum = 12;
-    const MessageType MsgTeansferLeader = 13;
+    const MessageType MsgTransferLeader = 13;
     const MessageType MsgTimeoutNow = 14;
     const MessageType MsgReadIndex = 15;
     const MessageType MsgReadIndexResp = 16;

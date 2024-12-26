@@ -101,8 +101,8 @@ namespace proto {
             case MsgCheckQuorum:
                 return "MsgCheckQuorum";
 
-            case MsgTeansferLeader:
-                return "MsgTeansferLeader";
+            case MsgTransferLeader:
+                return "MsgTransferLeader";
 
             case MsgTimeoutNow:
                 return "MsgTimeoutNow";

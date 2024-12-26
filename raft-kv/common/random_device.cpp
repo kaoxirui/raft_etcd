@@ -1,0 +1,8 @@
+#include "random_device.h"
+
+namespace kv {
+uint32_t RandomDevice::gen() {
+    return static_cast<uint32_t>(distribution_(gen_));
+}
+
+} // namespace kv
