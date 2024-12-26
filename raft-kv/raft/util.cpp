@@ -1,5 +1,6 @@
 #include "../common/log.h"
 #include "util.h"
+#include <boost/crc.hpp>
 
 namespace kv {
 proto::MessageType vote_resp_msg_type(proto::MessageType type) {
@@ -31,6 +32,17 @@ void entry_limit_size(uint64_t max_size, std::vector<proto::EntryPtr> &entries) 
 bool is_must_sync(const proto::HardState &st, const proto::HardState &prevst, size_t entsnum) {
     //日志条目不为0或votefor发生变化或currentTerm发生变化，表示需要同步写入持久化存储
     return entsnum != 0 || st.vote != prevst.vote || st.term != prevst.term;
+}
+
+bool is_local_msg(proto::MessageType type) {
+    return type == proto::MsgHup || type == proto::MsgBeat || type == proto::MsgUnreachable
+           || type == proto::MsgSnapStatus || type == proto::MsgCheckQuorum;
+}
+
+uint32_t compute_crc32(const char *data, size_t len) {
+    boost::crc_32_type crc32;
+    crc32.process_bytes(data, len);
+    return crc32();
 }
 
 } // namespace kv

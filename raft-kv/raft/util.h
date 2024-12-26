@@ -6,4 +6,7 @@ namespace kv {
 proto::MessageType vote_resp_msg_type(proto::MessageType type);
 void entry_limit_size(uint64_t max_size, std::vector<proto::EntryPtr> &entries);
 bool is_must_sync(const proto::HardState &st, const proto::HardState &prevst, size_t entsnum);
+bool is_local_msg(proto::MessageType type);
+
+uint32_t compute_crc32(const char *data, size_t len);
 } // namespace kv
