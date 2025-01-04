@@ -1473,9 +1473,197 @@ Status Raft::step(proto::MessagePtr msg) {
 
 ### 2.6.3 消息处理
 
+以leader选举为例
+
+#### 2.6.3.1 leader选举
+
+* 初始状态
+  * 集群中所有节点开始时处于follower状态
+* 超时
+  * 每个follower节点都会有一个随机的选举超时时间。如果在这个超时时间内没收到来自当前leader的心跳（AppendEntriesRPC），那么该follower节点会认为当前没有leader并进入candidate状态
+* 成为candidate
+  * 进入candidate的节点会将自己的任期号term加1，然后开始一次新的选举
+  * candidate会给自己投一票，并向集群中的其他节点发送RequestVote RPC请求，要求对方节点投票支持自己
+* 投票过程
+  * 收到RequestVote RPC的节点会根据一定的条件决定是否投票给请求者
+    * 请求者的任期号是否比机制的任期号新（请求者的term大于等于自己的）
+    * 请求者的日志是否比自己的新（最后一条日志的任期号和索引决定）
+  * 如果满足条件，follower节点会将选票投给请求者，并重置自己的选举超时时间
+* 确定leader
+  * 如果某个candidate收到了超过半数的选票，那么他就会成为新的leader，并立即开始发送心跳（AppendEntriesRPC）给其他节点，以通知自己成为leader并保持领导地位
+  * 如果没有candidate能在超时时间内获得多数选票，那么各个候选人会再次进入follower状态，并重新开始新的一轮选举。
+* 维持leader地位
+  * 成为leader的节点需要定期向其他节点发送心跳，以表明自己的leader地位和健康状态
+  * 其他节点如果没有在选举超时时间内收到心跳，将认为leader失效，再次开始选举过程
+
+```c++
+void Raft::tick_election() {
+    election_elapsed_++; //将选举超时时间递增。这通常是在固定时间间隔内被调用，模拟时间的流逝
+    //检查节点是否可以成为领导者，检查选举时间是否已经过去
+    if (promotable() && past_election_timeout()) {
+        election_elapsed_ = 0;
+        proto::MessagePtr msg(new proto::Message());
+        msg->from = id_;           //发送者为当前节点id
+        msg->type = proto::MsgHup; //表示节点要发起选举
+        step(std::move(msg));
+    }
+}
+```
+
+**发起选举的节点**
+
+当定时器超时，生成MsgHup类型的消息，step方法处理各种消息类型的消息
+
+在step函数中：
+
+* 如果当前节点是leader，则忽略MsgHup类型的消息
+
+* 获取raftlog中已提交但未应用Entry记录
+
+* 检测是否有未应用的EntryConfChange，如果有就放弃发起选举的机会
+
+*    检测当前集群是否开启了PreVote模式，如果开启了则发起PreElection预选举，没有开启则发起Election选举   
+
+     调用campaign()发起选举
+
+campaign方法的作用：发起选举或预选举
 
 
 
+预选举
+
+1. 将当前节点切换成PreCandidate状态
+
+2. 将voteMsg设置为 pb.MsgPreVote
+
+3. 任期号自增1
+
+
+
+选举
+
+1. 将当前节点切换成Candidate状态，该方法会增加raft.Term字段的值和重置相关状态
+
+2. 将voteMsg设置为 pb.MsgVote
+
+3. 确认term，为当前Term值+1
+
+
+
+统计选票，超过半数成为leader或发起正式选举
+
+**投票节点**
+
+发起投票的节点使用send方法，将请求投票的消息MsgVote发送给其他节点。在send方法中设置了发送节点的id，并放入msgs队列中
+
+在step方法中，对`MsgVote`和`MsgPreVote`消息进行了处理
+
+```C++
+case proto::MsgVote:
+        case proto::MsgPreVote: {
+            if (is_learner_) {
+                //学习者节点，不参与投票，记录日志并忽略该请求
+                // TODO: learner may need to vote, in case of node down when confchange.
+                LOG_INFO("%lu [log_term: %lu, index: %lu, vote: %lu] ignored %s from %lu "
+                         "[log_term: %lu, index: %lu] at term %lu: learner can not vote",
+                         id_, raft_log_->last_term(), raft_log_->last_index(), vote_,
+                         proto::msg_type_to_string(msg->type), msg->from, msg->log_term, msg->index,
+                         msg->term);
+                return Status::ok();
+            }
+            // We can vote if this is a repeat of a vote we've already cast...
+            bool can_vote =
+                //当前节点已经为请求的节点投过票
+                vote_ == msg->from ||
+                // ...we haven't voted and we don't think there's a leader yet in this term...
+                //当前节点没投票且当前任期内没有leader
+                (vote_ == 0 && lead_ == 0) ||
+                // ...or this is a PreVote for a future term...
+                //当前请求是预投票请求，且请求的任期大于当前任期
+                (msg->type == proto::MsgPreVote && msg->term > term_);
+            // ...and we believe the candidate is up to date.
+            //如果可以投票且候选人日志是最新的，则投票，记录日志并发送投票响应消息
+            if (can_vote && this->raft_log_->is_up_to_date(msg->index, msg->log_term)) {
+                LOG_INFO("%lu [log_term: %lu, index: %lu, vote: %lu] cast %s for %lu [log_term: "
+                         "%lu, index: %lu] at term %lu",
+                         id_, raft_log_->last_term(), raft_log_->last_index(), vote_,
+                         proto::msg_type_to_string(msg->type), msg->from, msg->log_term, msg->index,
+                         term_);
+                // When responding to Msg{Pre,}Vote messages we include the term
+                // from the message, not the local term. To see why consider the
+                // case where a single node was previously partitioned away and
+                // it's local term is now of date. If we include the local term
+                // (recall that for pre-votes we don't update the local term), the
+                // (pre-)campaigning node on the other end will proceed to ignore
+                // the message (it ignores all out of date messages).
+                // The term in the original message and current local term are the
+                // same in the case of regular votes, but different for pre-votes.
+
+                proto::MessagePtr m(new proto::Message());
+                m->to = msg->from;
+                m->term = msg->term;
+                m->type = vote_resp_msg_type(msg->type);
+                send(std::move(m));
+                //请求类型是MsgVote，则重置选举计时器并记录投票节点
+                if (msg->type == proto::MsgVote) {
+                    // Only record real votes.
+                    election_elapsed_ = 0;
+                    vote_ = msg->from;
+                }
+            }
+```
+
+```C++
+if (can_vote && this->raft_log_->is_up_to_date(msg->index, msg->log_term))
+```
+
+就是安全性里的选举限制
+
+投票的条件
+
+1. 已经为请求的节点投票
+2. 当前未投票并且没有leader
+3. 请求的任期大于当前任期
+4. 发起投票请求的节点日志是最新的
+
+发送`MsgVoteResp`或`MsgPreVoteResp`给请求投票的节点
+
+
+
+**发起选举节点对resp消息的处理**
+
+在`step_candidate`中对回应消息进行了处理
+
+```C++
+case proto::MsgPreVoteResp:
+        case proto::MsgVoteResp: {
+            uint64_t gr = poll(msg->from, msg->type, !msg->reject);
+            LOG_INFO("%lu [quorum:%u] has received %lu %s votes and %lu vote rejections", id_,
+                     quorum(), gr, proto::msg_type_to_string(msg->type), votes_.size() - gr);
+            //赞成票达到法定人数
+            if (quorum() == gr) {
+                //预候选人则发起正式选举
+                if (state_ == RaftState::PreCandidate) {
+                    campaign(kCampaignElection);
+                } else {
+                    //是候选人则成为领导并广播追加日志条目消息
+                    assert(state_ == RaftState::Candidate);
+                    //assert判断某个条件是否为真。如果为价，会抛出一个断言错误。可以帮助开发者检测和定位代码中的逻辑错误或不一致的状态
+                    become_leader();
+                    bcast_append();
+                }
+            } else if (quorum() == votes_.size() - gr) {
+                // pb.MsgPreVoteResp contains future term of pre-candidate
+                // m.Term > r.Term; reuse r.Term
+                become_follower(term_, 0);
+            }
+            break;
+        }
+```
+
+成为leader后，会调用`bcast_append`方法开始append日志
+
+当节点成为leader，会定期调用`void Raft::tick_heartbeat() `以保持集群内节点的一致性和领导权的稳定，该函数用于管理心跳和选举超时逻辑。
 
 # 参考
 
@@ -1484,3 +1672,9 @@ Status Raft::step(proto::MessagePtr msg) {
 2. https://blog.csdn.net/weixin_42663840/article/details/100005978
 
 3. https://blog.csdn.net/xxb249/article/details/80787501?ops_request_misc=&request_id=&biz_id=102&utm_term=etcd%E4%B8%AD%E7%9A%84raft%E7%AE%97%E6%B3%95%E5%AE%9E%E7%8E%B0&utm_medium=distribute.pc_search_result.none-task-blog-2~all~sobaiduweb~default-0-80787501.142^v100^pc_search_result_base2&spm=1018.2226.3001.4187
+
+4. https://blog.csdn.net/m0_37731056/article/details/109326748?ops_request_misc=&request_id=&biz_id=102&utm_term=etcd%E4%B8%AD%E7%9A%84transport&utm_medium=distribute.pc_search_result.none-task-blog-2~all~sobaiduweb~default-2-109326748.142^v100^pc_search_result_base2&spm=1018.2226.3001.4187
+5. https://juejin.cn/post/7268539925095579708
+6. https://github.com/liqingqiya/readcode-etcd-v3.4.10/blob/master/docs/Go%20Etcd%20%E6%BA%90%E7%A0%81%E5%AD%A6%E4%B9%A0%E3%80%906%E3%80%91Transport%20%E7%BD%91%E7%BB%9C%E5%B1%82%E6%A8%A1%E5%9D%97.md
+
+7. https://blog.csdn.net/skh2015java/article/details/90521420

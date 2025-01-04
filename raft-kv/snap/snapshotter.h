@@ -1,6 +1,6 @@
 #pragma once
-#include "/home/kao/cpp/raft-cpp/raft-kv/common/status.h"
-#include "/home/kao/cpp/raft-cpp/raft-kv/raft/proto.h"
+#include "../common/status.h"
+#include "../raft/proto.h"
 #include <memory>
 #include <string>
 

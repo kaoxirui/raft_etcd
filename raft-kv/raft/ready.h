@@ -38,7 +38,7 @@ struct Ready {
 
     //集群运行状态，包括term，提交索引和leader
     //硬状态需要使用者持久化，而软状态不需要
-    proto::HardState hard_sate;
+    proto::HardState hard_state;
 
     //readstate是包含索引和rctx（就是readindex()函数的参数）的结构，意义是某一时刻的集群最大提交索引
     //至于这个时刻使用者用于实现linearizable read就是另一回事了，其中rctx就是某一时刻的唯一标识

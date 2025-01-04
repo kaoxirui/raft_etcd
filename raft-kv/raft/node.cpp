@@ -151,8 +151,8 @@ void RawNode::advance(ReadyPtr rd) {
     if (rd->soft_state) {
         prev_soft_state_ = rd->soft_state;
     }
-    if (!rd->hard_sate.is_empty_state()) {
-        prev_hard_state_ = rd->hard_sate;
+    if (!rd->hard_state.is_empty_state()) {
+        prev_hard_state_ = rd->hard_state;
     }
     // If entries were applied (or a snapshot), update our cursor for
     // the next Ready. Note that if the current HardState contains a
@@ -176,7 +176,7 @@ void RawNode::advance(ReadyPtr rd) {
 }
 //处理配置变更操作
 //todo
-proto::ConfStatePtr RawNode::apply_conf_change(const proto::ConfChange &&cc) {
+proto::ConfStatePtr RawNode::apply_conf_change(const proto::ConfChange &cc) {
     //创建新的ConfState对象，用于记录配置变更后的节点状态
     proto::ConfStatePtr state(new proto::ConfState());
     if (cc.node_id == 0) {

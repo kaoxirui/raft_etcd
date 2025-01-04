@@ -69,7 +69,7 @@ public:
 
     //propose_conf_change()提议修改配置，当这个提议产生的日志被使用者应用时就需要通过调用这个接口
     //把配置应用到本地节点。常规日志被应用到修改使用者的状态，而配置修改日志更新的是raft自己的状态
-    virtual proto::ConfStatePtr apply_conf_change(const proto::ConfChange &&cc) = 0;
+    virtual proto::ConfStatePtr apply_conf_change(const proto::ConfChange &cc) = 0;
 
     //把leader转移到指定的peer
     virtual void transfer_leadership(uint64_t lead, ino64_t transferee) = 0;
@@ -121,7 +121,7 @@ public:
 
     void advance(ReadyPtr rd) final;
 
-    proto::ConfStatePtr apply_conf_change(const proto::ConfChange &&cc) final;
+    proto::ConfStatePtr apply_conf_change(const proto::ConfChange &cc) final;
 
     void transfer_leadership(uint64_t lead, ino64_t transferee) final;
 

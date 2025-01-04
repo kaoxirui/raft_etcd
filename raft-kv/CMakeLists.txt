@@ -5,13 +5,23 @@ cmake_policy(SET CMP0003 NEW)
 endif(COMMAND cmake_policy)
 
 set(SRC
-    common/status.cpp
-    raft/config.h
-    raft/proto.cpp
-    raft/storage.cpp
-    raft/util.cpp
     common/log.h
+    common/slice.h
+    common/status.cpp
+    common/bytebuffer.cpp
+    common/random_device.cpp
+    raft/proto.cpp
+    raft/config.cpp
+    raft/raft.cpp
+    raft/storage.cpp
+    raft/node.cpp
+    raft/raft_log.cpp
     raft/unstable.cpp
+    raft/progress.cpp
+    raft/readonly.cpp
+    raft/raft_status.cpp
+    raft/ready.cpp
+    raft/util.cpp
 )
 
 find_package(PkgConfig REQUIRED)
