@@ -1,5 +1,5 @@
-#include "log.h"
-#include "util.h"
+#include "../common/log.h"
+#include "../raft/util.h"
 #include "wal.h"
 #include <boost/filesystem.hpp>
 #include <fcntl.h>

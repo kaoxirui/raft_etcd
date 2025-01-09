@@ -21,7 +21,7 @@ Ready::Ready(std::shared_ptr<Raft> raft, SoftStatePtr pre_soft_state,
     }
     proto::HardState hs = raft->hard_state();
     if (!hs.equal(pre_hard_state)) {
-        this->hard_sate = hs;
+        this->hard_state = hs;
     }
     proto::SnapshotPtr snapshot = raft->raft_log_->unstable_->snapshot_;
     if (snapshot) {
@@ -30,12 +30,12 @@ Ready::Ready(std::shared_ptr<Raft> raft, SoftStatePtr pre_soft_state,
     if (!raft->read_states_.empty()) {
         this->read_state = raft->read_states_;
     }
-    this->must_sync = is_must_sync(hs, hard_sate, entries.size());
+    this->must_sync = is_must_sync(hs, hard_state, entries.size());
 }
 
 //检查ready对象是否包含任何需要处理的更新
 bool Ready::contains_updates() const {
-    return soft_state != nullptr || !hard_sate.is_empty_state() || !snapshot.is_empty()
+    return soft_state != nullptr || !hard_state.is_empty_state() || !snapshot.is_empty()
            || !entries.empty() || !committed_entries.empty() || !messages.empty()
            || read_state.empty();
 }
@@ -57,7 +57,7 @@ bool Ready::equal(const Ready &rd) const {
     if (soft_state && rd.soft_state && !soft_state->equal(*rd.soft_state)) {
         return false;
     }
-    if (!hard_sate.equal(rd.hard_sate)) {
+    if (!hard_state.equal(rd.hard_state)) {
         return false;
     }
     if (read_state.size() != read_state.size()) {

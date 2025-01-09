@@ -1,9 +1,9 @@
 #pragma once
+#include "../common/random_device.h"
 #include "config.h"
 #include "progress.h"
 #include "proto.h"
 #include "raft_log.h"
-#include "random_device.h"
 #include "readonly.h"
 #include "ready.h"
 #include <functional>
@@ -20,8 +20,6 @@ public:
     void become_pre_candidate();
     void become_leader();
     void campaign(const std::string &campaign_type);
-    void tick_election();
-    bool past_election_timeout();
     void send(proto::MessagePtr msg);
     uint32_t quorum() const { return static_cast<uint32_t>(prs_.size() / 2 + 1); }
     uint32_t poll(uint64_t id, proto::MessageType type, bool v);
@@ -36,8 +34,6 @@ public:
 
     bool restore(const proto::Snapshot &snapshot);
 
-    void send(proto::MessagePtr msg);
-
     void restore_node(const std::vector<uint64_t> &nodes, bool is_learner);
 
     // promotable indicates whether state machine can be promoted to leader,
@@ -49,8 +45,6 @@ public:
     void add_node_or_learner(uint64_t id, bool is_learner);
 
     void remove_node(uint64_t id);
-
-    uint32_t quorum() const { return static_cast<uint32_t>(prs_.size() / 2 + 1); }
 
     SoftStatePtr soft_state() const;
 
@@ -141,8 +135,8 @@ public:
     }
 
 public:
-    uint32_t id_;
-    uint32_t term_;
+    uint64_t id_;
+    uint64_t term_;
     uint64_t vote_;
 
     std::vector<ReadState> read_states_;

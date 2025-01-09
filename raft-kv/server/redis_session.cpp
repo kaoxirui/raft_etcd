@@ -5,7 +5,7 @@
 #include <unordered_map>
 
 namespace kv {
-#define RECEIVE_BUFFER_SIZE(1024 * 512) ;
+#define RECEIVE_BUFFER_SIZE (1024 * 512)
 namespace shared {
     static const char *ok = "+OK\r\n";
     static const char *err = "-ERR %s\r\n";
@@ -105,7 +105,7 @@ void RedisSession::start() {
 void RedisSession::handle_read(size_t bytes) {
     uint8_t *start = read_buffer_.data();
     uint8_t *end = read_buffer_.data() + bytes;
-    int error = REDIS_OK;
+    int err = REDIS_OK;
     std::vector<struct redisReply *> replies;
 
     while (!quit_ && start < end) {
@@ -201,7 +201,7 @@ void RedisSession::start_send() {
     auto self = shared_from_this();
     //获取发送数据
     uint32_t remaining = send_buffer_.readable_bytes();
-    auto buffer = boost::asio::buffer(send_buffer_.reader().remaining);
+    auto buffer = boost::asio::buffer(send_buffer_.reader(), remaining);
     //异步发送数据
     auto handler = [self](const boost::system::error_code &error, std::size_t bytes) {
         if (bytes == 0) {

@@ -1,5 +1,5 @@
 #pragma once
-#include "./raft/proto.h"
+#include "../raft/proto.h"
 #include <memory>
 
 namespace kv {

@@ -1,4 +1,4 @@
-#include "log.h"
+#include "../common/log.h"
 #include "progress.h"
 
 namespace kv {
@@ -102,6 +102,14 @@ void Progress::reset_state(ProgressState st) {
     pending_snapshot = 0;
     this->state = st;
     this->inflights->reset();
+}
+
+std::string Progress::string() const {
+    char buffer[256];
+    int n = snprintf(buffer, sizeof(buffer),
+                     "next = %lu, match = %lu, state = %s, waiting = %d, pendingSnapshot = %lu",
+                     next, match, progress_state_to_string(state), is_paused(), pending_snapshot);
+    return std::string(buffer, n);
 }
 
 //暂停表示leader不能再向peer发日志消息了，必须等待peer回复打破这个状态

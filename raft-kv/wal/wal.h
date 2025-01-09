@@ -1,6 +1,6 @@
 #pragma once
-#include "proto.h"
-#include "status.h"
+#include "../common/status.h"
+#include "../raft/proto.h"
 #include <memory>
 #include <stdio.h>
 

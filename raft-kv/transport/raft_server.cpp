@@ -1,4 +1,4 @@
-#include "./common/log.h"
+#include "../common/log.h"
 #include "proto.h"
 #include "raft_server.h"
 #include "transport.h"

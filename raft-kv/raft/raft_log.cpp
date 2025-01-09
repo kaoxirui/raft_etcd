@@ -1,9 +1,10 @@
-#include "log.h"
+#include "../common/log.h"
 #include "raft_log.h"
 #include "util.h"
 namespace kv {
 RaftLog::RaftLog(StoragePtr storage, uint64_t max_next_ents_size)
-    : storage_(std::move(storage)), committed_(0), applied_(0), max_next_ents_size_(max_next_ents_size) {
+    : storage_(std::move(storage)), committed_(0), applied_(0),
+      max_next_ents_size_(max_next_ents_size) {
     assert(storage_);
     uint64_t first;
     //storage类似于使用者持久化存储的cache
@@ -28,8 +29,9 @@ RaftLog::~RaftLog() {
 // 志的索引和届，笔者会在其他文章介绍leader向其他节点发送日志的方法，此处只需要知道一点，leader有
 // 一个参数记录下一次将要发送给某个节点的索引起始值，也就是entries[0].Index，而index和logTerm值就是
 // entries[-1].Index和entries[-1].Term。知道这两个参数再来看源码注释。
-void RaftLog::maybe_append(uint64_t index, uint64_t log_term, uint64_t committed, std::vector<proto::EntryPtr> entries,
-                           uint64_t &last_new_index, bool &ok) {
+void RaftLog::maybe_append(uint64_t index, uint64_t log_term, uint64_t committed,
+                           std::vector<proto::EntryPtr> entries, uint64_t &last_new_index,
+                           bool &ok) {
     if (match_term(index, log_term)) {
         uint64_t lastnewi = index + entries.size();
         uint64_t ci = find_conflict(entries);
@@ -68,7 +70,8 @@ uint64_t RaftLog::append(std::vector<proto::EntryPtr> entries) {
     //获取要追加的第一个条目的前一个索引
     uint64_t after = entries[0]->index - 1;
     if (after < committed_) {
-        LOG_FATAL("after(%lu) is out of range [committed(%lu)]\",after ,committed", after, committed_);
+        LOG_FATAL("after(%lu) is out of range [committed(%lu)]\",after ,committed", after,
+                  committed_);
     }
     unstable_->truncate_add_append(std::move(entries));
     return last_index();
@@ -80,8 +83,8 @@ uint64_t RaftLog::find_conflict(const std::vector<proto::EntryPtr> &entries) {
             if (entry->index < last_index()) {
                 uint64_t t;
                 Status status = this->term(entry->index, t);
-                LOG_INFO("find conflict at index %lu [existing term: %lu,conflicting term:%lu],%s", entry->index, t, entry->term,
-                         status.to_string().c_str());
+                LOG_INFO("find conflict at index %lu [existing term: %lu,conflicting term:%lu],%s",
+                         entry->index, t, entry->term, status.to_string().c_str());
             }
             return entry->index;
         }
@@ -124,7 +127,8 @@ bool RaftLog::maybe_commit(uint64_t max_index, uint64_t term) {
 }
 
 void RaftLog::restore(proto::SnapshotPtr snapshot) {
-    LOG_INFO("log starts to restore snapshot [index: %lu, term: %lu]", snapshot->metadata.index, snapshot->metadata.term);
+    LOG_INFO("log starts to restore snapshot [index: %lu, term: %lu]", snapshot->metadata.index,
+             snapshot->metadata.term);
     //更新提交索引committed_为快照索引
     committed_ = snapshot->metadata.index;
     unstable_->restore(std::move(snapshot));
@@ -152,12 +156,14 @@ void RaftLog::applied_to(uint64_t index) {
         return;
     }
     if (committed_ < index || index < applied_) {
-        LOG_ERROR("applied(%lu) is out of range [prevApplied(%lu), committed(%lu)]", index, applied_, committed_);
+        LOG_ERROR("applied(%lu) is out of range [prevApplied(%lu), committed(%lu)]", index,
+                  applied_, committed_);
     }
     applied_ = index;
 }
 
-Status RaftLog::slice(uint64_t low, uint64_t high, uint64_t max_size, std::vector<proto::EntryPtr> &entries) const {
+Status RaftLog::slice(uint64_t low, uint64_t high, uint64_t max_size,
+                      std::vector<proto::EntryPtr> &entries) const {
     Status status = must_check_out_of_bounds(low, high);
     if (!status.is_ok()) {
         return status;
@@ -276,7 +282,9 @@ void RaftLog::all_entries(std::vector<proto::EntryPtr> &entries) {
     if (status.is_ok()) {
         return;
     }
-    if (status.to_string() == Status::invalid_argument("requested index is unavailable due to compaction").to_string()) {
+    if (status.to_string()
+        == Status::invalid_argument("requested index is unavailable due to compaction")
+               .to_string()) {
         this->all_entries(entries);
     }
     LOG_FATAL("%s", status.to_string().c_str());
@@ -288,8 +296,9 @@ void RaftLog::commit_to(uint64_t to_commit) {
     if (committed_ < to_commit) {
         //新的提交索引超出当前日志的最后一个索引范围，记录错误并终止 程序
         if (last_index() < to_commit) {
-            LOG_FATAL("to_commit(%lu) is out of range [lastIndex(%lu)]. was the raft log corrupted,truncated or lost?", to_commit,
-                      last_index());
+            LOG_FATAL("to_commit(%lu) is out of range [lastIndex(%lu)]. was the raft log "
+                      "corrupted,truncated or lost?",
+                      to_commit, last_index());
         }
         committed_ = to_commit;
     } else {

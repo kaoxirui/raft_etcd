@@ -1,5 +1,5 @@
-#include "./common/bytebuffer.h"
-#include "log.h"
+#include "../common/bytebuffer.h"
+#include "../common/log.h"
 #include "peer.h"
 #include "proto.h"
 #include <boost/algorithm/string.hpp>

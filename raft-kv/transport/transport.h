@@ -1,7 +1,7 @@
 #pragma once
-#include "./common/status.h"
-#include "./raft/node.h"
-#include "./raft/proto.h"
+#include "../common/status.h"
+#include "../raft/node.h"
+#include "../raft/proto.h"
 #include "peer.h"
 #include "raft_server.h"
 #include "transport.h"

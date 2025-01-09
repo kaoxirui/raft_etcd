@@ -1,6 +1,6 @@
+#include "../common/slice.h"
 #include "proto.h"
 #include "raft.h"
-#include "slice.h"
 #include "util.h"
 #include <boost/algorithm/string.hpp>
 
@@ -225,8 +225,8 @@ Status Raft::step(proto::MessagePtr msg) {
         }
     } else if (msg->term < term_) {
         //!
-        if ((check_quorum_ || pre_vote_) && (msg->type == proto::MsgHeartbeat)
-            || (msg->type == proto::MsgApp)) {
+        if ((check_quorum_ || pre_vote_)
+            && (msg->type == proto::MsgHeartbeat || msg->type == proto::MsgApp)) {
             // 生成一个MsgAppResp消息，并发送给消息的发送者。确保通知leader当前节点是活跃的，但不会扰乱当前的term
             proto::MessagePtr m(new proto::Message());
             m->to = msg->from;
@@ -348,6 +348,7 @@ Status Raft::step(proto::MessagePtr msg) {
         default:
             return step_(msg);
     }
+    return Status::ok();
 }
 
 Status Raft::step_leader(proto::MessagePtr msg) {
@@ -1026,7 +1027,7 @@ bool Raft::append_entry(const std::vector<proto::Entry> &entries) {
 
 void Raft::tick_election() {
     election_elapsed_++;
-    if (promotable() && past_election_timeout) {
+    if (promotable() && past_election_timeout()) {
         election_elapsed_ = 0;
         proto::MessagePtr msg(new proto::Message());
         msg->from = id_;

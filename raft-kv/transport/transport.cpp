@@ -1,4 +1,4 @@
-#include "./common/log.h"
+#include "../common/log.h"
 #include "transport.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/asio.hpp>

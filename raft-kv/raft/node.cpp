@@ -1,4 +1,4 @@
-#include "log.h"
+#include "../common/log.h"
 #include "node.h"
 
 namespace kv {
@@ -245,6 +245,21 @@ void RawNode::report_unreachable(uint64_t id) {
     Status status = raft_->step(std::move(msg));
     if (!status.is_ok()) {
         LOG_WARN("report_unreachable %s", status.to_string().c_str());
+    }
+}
+
+//报告快照发送的状态
+void RawNode::report_snapshot(uint64_t id, SnapshotStatus status) {
+    //判断快照状态
+    bool rej = (status == SnapshotFailure);
+    proto::MessagePtr msg(new proto::Message());
+    msg->type = proto::MsgSnapStatus;
+    msg->from = id;
+    msg->reject = rej;
+
+    Status s = raft_->step(std::move(msg));
+    if (!s.is_ok()) {
+        LOG_WARN("report_snapshot %s", s.to_string().c_str());
     }
 }
 

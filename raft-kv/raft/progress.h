@@ -67,6 +67,7 @@ public:
 
     void reset_state(ProgressState state);
 
+    //todo use?
     std::string string() const;
 
     bool is_paused() const;

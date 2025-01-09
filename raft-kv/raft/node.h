@@ -4,7 +4,7 @@
  * @Last Modified by: xirui kao
  * @Last Modified time: 2024-12-03 22:11:25
  */
-#pragma once;
+#pragma once
 
 #include "config.h"
 #include "proto.h"
