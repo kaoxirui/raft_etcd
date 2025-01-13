@@ -111,8 +111,8 @@ private:
     void do_send_data(uint8_t type, const uint8_t *data, uint32_t len) {
         if (!session_) {
             session_ = std::make_shared<ClientSession>(io_service_, this);
-            session_->send(type, data, len);
             session_->start_connect();
+            session_->send(type, data, len);
         } else {
             session_->send(type, data, len);
         }

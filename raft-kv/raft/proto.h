@@ -100,10 +100,7 @@ namespace proto {
     struct Snapshot {
         Snapshot() = default;
         explicit Snapshot(const std::vector<uint8_t> &data) : data(data) {}
-        bool equal(const Snapshot &snap) const {
-            //如果operator==没有声明为const，不能比较const对象
-            return data == snap.data && metadata == snap.metadata;
-        }
+        bool equal(const Snapshot &snap) const;
         bool is_empty() const { return metadata.index == 0; }
         std::vector<uint8_t> data;
         SnapshotMetadata metadata;

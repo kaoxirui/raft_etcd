@@ -1,5 +1,5 @@
 
-#include "/home/kao/cpp/raft-cpp/raft-kv/common/bytebuffer.h"
+#include "bytebuffer.h"
 #include <string.h>
 
 namespace kv {

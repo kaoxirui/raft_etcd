@@ -14,7 +14,7 @@ public:
     void stable_to(uint64_t index, uint64_t term);
     void stable_snap_to(uint64_t index);
     void restore(proto::SnapshotPtr snapshot);
-    void truncate_add_append(std::vector<proto::EntryPtr> entries);
+    void truncate_and_append(std::vector<proto::EntryPtr> entries);
     void slice(uint64_t low, uint64_t high, std::vector<proto::EntryPtr> &entries);
 
 public:

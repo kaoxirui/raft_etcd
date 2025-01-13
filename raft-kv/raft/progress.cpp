@@ -29,7 +29,8 @@ void InFlights::add(uint64_t inflight) {
         if (new_size == 0) {
             new_size = 1;
         } else if (new_size > size) {
-            size = new_size;
+            //size = new_size;
+            new_size = size;
         }
         buffer.resize(new_size);
     }
@@ -77,7 +78,7 @@ void Progress::become_replicate() {
 void Progress::become_probe() {
     //如果原始状态是快照，说明快照已经被Peer接收了，那么Next=pendingSnapshot+1，
     // 意思就是从快照索引的下一个索引开始发送。
-    if (state == pending_snapshot) {
+    if (state == ProgressStateSnapshot) {
         //使用临时变量，因为reset会重置pending_snapshot
         uint64_t pending = pending_snapshot;
         reset_state(ProgressStateProbe);

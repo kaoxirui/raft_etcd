@@ -86,7 +86,7 @@ void Unstable::restore(proto::SnapshotPtr snapshot) {
     snapshot_ = snapshot;
 }
 
-void Unstable::truncate_add_append(std::vector<proto::EntryPtr> entries) {
+void Unstable::truncate_and_append(std::vector<proto::EntryPtr> entries) {
     if (entries.empty()) {
         return;
     }
@@ -106,7 +106,7 @@ void Unstable::truncate_add_append(std::vector<proto::EntryPtr> entries) {
         LOG_INFO("truncate the unstable entries before index %lu", after);
         std::vector<proto::EntryPtr> entries_slice;
         this->slice(offset_, after, entries_slice);
-        entries_slice.insert(entries_slice.end(), entries_slice.begin(), entries_slice.end());
+        entries_slice.insert(entries_slice.end(), entries.begin(), entries.end());
         entries_ = std::move(entries_slice);
     }
 }
@@ -117,7 +117,8 @@ void Unstable::slice(uint64_t low, uint64_t high, std::vector<proto::EntryPtr> &
     if (low < offset_ || high > upper) {
         LOG_FATAL("unstable.slice[%lu,%lu) out of bound [%lu,%lu]", low, high, offset_, upper);
     }
-    entries.insert(entries.end(), entries_.begin() + low - offset_, entries_.begin() + high - offset_);
+    entries.insert(entries.end(), entries_.begin() + low - offset_,
+                   entries_.begin() + high - offset_);
 }
 
 } // namespace kv

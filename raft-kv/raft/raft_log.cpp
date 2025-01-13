@@ -73,7 +73,7 @@ uint64_t RaftLog::append(std::vector<proto::EntryPtr> entries) {
         LOG_FATAL("after(%lu) is out of range [committed(%lu)]\",after ,committed", after,
                   committed_);
     }
-    unstable_->truncate_add_append(std::move(entries));
+    unstable_->truncate_and_append(std::move(entries));
     return last_index();
 }
 
@@ -97,7 +97,7 @@ uint64_t RaftLog::find_conflict(const std::vector<proto::EntryPtr> &entries) {
 void RaftLog::next_entries(std::vector<proto::EntryPtr> &entries) const {
     uint64_t off = std::max(applied_ + 1, first_index());
     //检查是否有未应用的条目，已提交的条目多余未应用的条目，说明有未应用的条目需要处理
-    if (committed_ > off) {
+    if (committed_ + 1 > off) {
         Status status = slice(off, committed_ + 1, max_next_ents_size_, entries);
         if (!status.is_ok()) {
             LOG_FATAL("unexpected error when getting unapplied entries");
@@ -194,7 +194,7 @@ Status RaftLog::slice(uint64_t low, uint64_t high, uint64_t max_size,
 }
 
 Status RaftLog::must_check_out_of_bounds(uint64_t low, uint64_t high) const {
-    assert(high > low);
+    assert(high >= low);
     uint64_t first = first_index();
     if (low < first) {
         return Status::invalid_argument("requested index is unavailable due to compaction");

@@ -18,6 +18,13 @@ int main(int argc, char *argv[]) {
     GError *error = NULL;
     GOptionContext *context = g_option_context_new("usage");
     g_option_context_add_main_entries(context, entries, NULL);
+
+    // //打印传递的参数值
+    // fprintf(stderr, "argc: %d\n", argc);
+    // for (int i = 0; i < argc; ++i) {
+    //     fprintf(stderr, "argv[%d]: %s\n", i, argv[i]);
+    // }
+
     if (!g_option_context_parse(context, &argc, &argv, &error)) {
         fprintf(stderr, "option parsing failed: %s\n", error->message);
         exit(EXIT_FAILURE);
@@ -31,6 +38,6 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    kv::RaftNode::main(g_id, g_cluster, g_port);
+    kv::RaftNode::main(g_id, std::string(g_cluster), g_port);
     g_option_context_free(context);
 }

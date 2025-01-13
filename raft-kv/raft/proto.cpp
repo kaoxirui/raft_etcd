@@ -1,3 +1,4 @@
+#include "../common/log.h"
 #include "proto.h"
 #include <msgpack.hpp>
 namespace kv {
@@ -25,7 +26,7 @@ namespace proto {
     //左移一位相当于乘以2，右移一位相当于除2（不完全等同）
     static uint32_t u64_serialize_size(uint64_t d) {
         if (d < (1ULL << 8)) {
-            if (d < (1ULL < 7)) {
+            if (d < (1ULL << 7)) {
                 return 1;
             } else {
                 return 2;
@@ -160,6 +161,10 @@ namespace proto {
         msgpack::sbuffer sbuf;
         msgpack::pack(sbuf, *this);
         return std::vector<uint8_t>(sbuf.data(), sbuf.data() + sbuf.size());
+    }
+    bool Snapshot::equal(const Snapshot &snap) const {
+        //如果operator==没有声明为const，不能比较const对象
+        return data == snap.data && metadata == snap.metadata;
     }
 } // namespace proto
 } // namespace kv

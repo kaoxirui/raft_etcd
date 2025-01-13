@@ -180,11 +180,13 @@ void Raft::become_pre_candidate() {
 
 Status Raft::step(proto::MessagePtr msg) {
     if (msg->term == 0) {
-        //term为0 的消息
-    } else if (msg->term > term_) { //传入消息term大于当前term
+        //处理term为0的消息，表示本地消息，不影响当前term
+    } else if (msg->term > term_) { //传入消息的term大于当前term，根据不同消息类型进行处理
         if (msg->type == proto::MsgVote || msg->type == proto::MsgPreVote) {
+            //检查是否是强制转移领导权请求。将消息上下文转换为Slice对象，与kCampaignTransfer进行比较
             bool force = (Slice((const char *)msg->context.data(), msg->context.size())
                           == Slice(kCampaignTransfer));
+            //检查当前是否在选举租约期内，即启用了check_quorum_，当前有领导者，上次选举超时以来经过的时间小于选举超时时间
             bool in_lease = (check_quorum_ && lead_ != 0 && election_elapsed_ < election_timeout_);
             //忽略非强制转移领导权请求且在租约期内的投票请求
             if (!force && in_lease) {
@@ -200,11 +202,12 @@ Status Raft::step(proto::MessagePtr msg) {
             }
         }
         switch (msg->type) {
-            case proto::MsgPreVote:
+            case proto::MsgPreVote: //Prevote不更改term
                 // Never change our term in response to a PreVote
                 break;
             case proto::MsgPreVoteResp:
                 if (!msg->reject) {
+                    //预投票响应没有被拒绝，不改变term
                     // We send pre-vote requests with a term in our future. If the
                     // pre-vote is granted, we will increment our term when we get a
                     // quorum. If it is not, the term comes from the node that
@@ -216,29 +219,55 @@ Status Raft::step(proto::MessagePtr msg) {
                 LOG_INFO(
                     "%lu [term: %lu] received a %s message with higher term from %lu [term: %lu]",
                     id_, term_, proto::msg_type_to_string(msg->type), msg->from, msg->term);
+                //如果是追加日志、心跳消息或快照消息，更新term并成为follower
                 if (msg->type == proto::MsgApp || msg->type == proto::MsgHeartbeat
                     || msg->type == proto::MsgSnap) {
                     become_follower(msg->term, msg->from);
                 } else {
+                    //其他消息，更新term并成为follower，leader未知
                     become_follower(msg->term, 0);
                 }
         }
-    } else if (msg->term < term_) {
-        //!
+    } else if (msg->term < term_) { //收到的term小于当前term的消息的情况
         if ((check_quorum_ || pre_vote_)
             && (msg->type == proto::MsgHeartbeat || msg->type == proto::MsgApp)) {
-            // 生成一个MsgAppResp消息，并发送给消息的发送者。确保通知leader当前节点是活跃的，但不会扰乱当前的term
+            //收到低延迟的可能原因，网络延迟，节点隔离等情况
+            // We have received messages from a leader at a lower term. It is possible
+            // that these messages were simply delayed in the network, but this could
+            // also mean that this node has advanced its term number during a network
+            // partition, and it is now unable to either win an election or to rejoin
+            // the majority on the old term. If checkQuorum is false, this will be
+            // handled by incrementing term numbers in response to MsgVote with a
+            // higher term, but if checkQuorum is true we may not advance the term on
+            // MsgVote and must generate other messages to advance the term. The net
+            // result of these two features is to minimize the disruption caused by
+            // nodes that have been removed from the cluster's configuration: a
+            // removed node will send MsgVotes (or MsgPreVotes) which will be ignored,
+            // but it will not receive MsgApp or MsgHeartbeat, so it will not create
+            // disruptive term increases, by notifying leader of this node's activeness.
+            // The above comments also true for Pre-Vote
+            //
+            // When follower gets isolated, it soon starts an election ending
+            // up with a higher term than leader, although it won't receive enough
+            // votes to win the election. When it regains connectivity, this response
+            // with "pb.MsgAppResp" of higher term would force leader to step down.
+            // However, this disruption is inevitable to free this stuck node with
+            // fresh election. This can be prevented with Pre-Vote phase.
             proto::MessagePtr m(new proto::Message());
+            //生成一个MsgAppResp消息，并发送给消息的发送者。确保通知leader当前节点是活跃的，但不会扰乱当前的term
             m->to = msg->from;
             m->type = proto::MsgAppResp;
             send(std::move(m));
         } else if (msg->type == proto::MsgPreVote) {
-            LOG_INFO("%lu [log_term: %lu, index: %lu, vote: %lu] rejected %s from %lu [log_term: "
-                     "%lu, index: %lu] at term %lu",
-                     id_, raft_log_->last_term(), raft_log_->last_index(), vote_,
-                     proto::msg_type_to_string(msg->type), msg->from, msg->log_term, msg->index,
-                     term_);
-            //消息类型是MsgPreVote，生成一个拒绝的MsgPreVoteResp消息，并发送给消息的发送者。这确保了在启用预投票后，不会丢弃低term的消息而导致集群死锁
+            // Before Pre-Vote enable, there may have candidate with higher term,
+            // but less log. After update to Pre-Vote, the cluster may deadlock if
+            // we drop messages with a lower term.
+            LOG_INFO(
+                "%lu [log_term: %lu, index: %lu, vote: %lu] rejected %s from %lu [log_term: "
+                "%lu, index: %lu] at term %lu",
+                id_, raft_log_->last_term(), raft_log_->last_index(), vote_,
+                proto::msg_type_to_string(msg->type), msg->from, msg->log_term, msg->index,
+                term_); //消息类型是MsgPreVote，生成一个拒绝的MsgPreVoteResp消息，并发送给消息的发送者。这确保了在启用预投票后，不会丢弃低term的消息而导致集群死锁
             proto::MessagePtr m(new proto::Message());
             m->to = msg->from;
             m->type = proto::MsgPreVoteResp;
@@ -246,17 +275,18 @@ Status Raft::step(proto::MessagePtr msg) {
             m->term = term_;
             send(std::move(m));
         } else {
-            //ignore other cases
+            // ignore other cases
             LOG_INFO("%lu [term: %lu] ignored a %s message with lower term from %lu [term: %lu]",
                      id_, term_, proto::msg_type_to_string(msg->type), msg->from, msg->term);
         }
         return Status::ok();
     }
+
     switch (msg->type) {
         case proto::MsgHup: {
             if (state_ != RaftState::Leader) {
                 std::vector<proto::EntryPtr> entries;
-                //获取未应用日志条目
+                //获取未应用的日志条目
                 Status status = raft_log_->slice(raft_log_->applied_ + 1, raft_log_->committed_ + 1,
                                                  RaftLog::unlimited(), entries);
                 if (!status.is_ok()) {
@@ -285,6 +315,8 @@ Status Raft::step(proto::MessagePtr msg) {
         case proto::MsgVote:
         case proto::MsgPreVote: {
             if (is_learner_) {
+                //学习者节点，不参与投票，记录日志并忽略该请求
+                // TODO: learner may need to vote, in case of node down when confchange.
                 LOG_INFO("%lu [log_term: %lu, index: %lu, vote: %lu] ignored %s from %lu "
                          "[log_term: %lu, index: %lu] at term %lu: learner can not vote",
                          id_, raft_log_->last_term(), raft_log_->last_index(), vote_,
@@ -319,13 +351,15 @@ Status Raft::step(proto::MessagePtr msg) {
                 // the message (it ignores all out of date messages).
                 // The term in the original message and current local term are the
                 // same in the case of regular votes, but different for pre-votes.
+
                 proto::MessagePtr m(new proto::Message());
                 m->to = msg->from;
                 m->term = msg->term;
                 m->type = vote_resp_msg_type(msg->type);
                 send(std::move(m));
+                //请求类型是MsgVote，则重置选举计时器并记录投票节点
                 if (msg->type == proto::MsgVote) {
-                    //only record real votes
+                    // Only record real votes.
                     election_elapsed_ = 0;
                     vote_ = msg->from;
                 }
@@ -343,11 +377,14 @@ Status Raft::step(proto::MessagePtr msg) {
                 m->reject = true;
                 send(std::move(m));
             }
+
             break;
         }
-        default:
+        default: {
             return step_(msg);
+        }
     }
+
     return Status::ok();
 }
 

@@ -76,7 +76,7 @@ public:
                 try {
                     //msgpack::unpack将缓冲区的二进制数据解码为msgpack::object_handle对象
                     //并转换为proto::Message类型
-                    msgpack::object_handle oh = msgpack::unpack((const char *)buffer_.size(), len);
+                    msgpack::object_handle oh = msgpack::unpack((const char *)buffer_.data(), len);
                     oh.get().convert(*msg);
                 } catch (std::exception &e) {
                     LOG_ERROR("bad message %s, size = %lu, type %s", e.what(), buffer_.size(),
@@ -90,8 +90,8 @@ public:
                 LOG_DEBUG("unknown msg type %d, len = %d", meta_.type, ntohl(meta_.len));
                 return;
             }
-                start_read_meta();
         }
+        start_read_meta();
     }
     void on_receive_stream_message(proto::MessagePtr);
     boost::asio::ip::tcp::socket socket;

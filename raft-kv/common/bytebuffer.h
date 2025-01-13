@@ -1,5 +1,5 @@
 #pragma once
-#include "/home/kao/cpp/raft-cpp/raft-kv/common/slice.h"
+#include "slice.h"
 #include <stdint.h>
 #include <string.h>
 #include <vector>

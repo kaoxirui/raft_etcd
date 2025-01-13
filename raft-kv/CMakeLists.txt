@@ -4,6 +4,12 @@ if(COMMAND cmake_policy)
 cmake_policy(SET CMP0003 NEW)
 endif(COMMAND cmake_policy)
 
+# 设置调试信息
+set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 set(SRC
 common/log.h
 common/slice.h
