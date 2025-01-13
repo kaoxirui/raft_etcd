@@ -69,7 +69,8 @@ bring the node back up and verify it recovers with the updated value "new-value"
     100.00% <= 4 milliseconds
     105485.23 requests per second
 
-
+# 说明
+参看github上的代码，C++实现ETCD，仅供学习使用
 ​    
 ​    
 ​    
